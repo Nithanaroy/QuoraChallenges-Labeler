@@ -17,15 +17,15 @@ def upsert(a, key, inc):
 
 
 class Question:
-    def __init__(self):
+    def __init__(self, question_string=None):
         self.categories = []
-        self.question = None
+        self.question = question_string
         self.tf = {}
         self.word_weights = {}
 
 
 class Labeler:
-    def __init__(self):
+    def __init__(self, datasize):
         self.word_counts = {}  # known words and their counts
         self.stopwords = frozenset(
             [u'i', u'me', u'my', u'myself', u'we', u'our', u'ours', u'ourselves', u'you', u'your', u'yours',
@@ -40,6 +40,7 @@ class Labeler:
              u'few', u'more', u'most', u'other', u'some', u'such', u'no', u'nor', u'not', u'only', u'own', u'same',
              u'so', u'than', u'too', u'very', u's', u't', u'can', u'will', u'just', u'don', u'should', u'now'])
         self.dataset = []  # known questions
+        self.dataset_size = datasize
 
     def save(self, category_string, question):
         """
@@ -63,12 +64,11 @@ class Labeler:
         :param question: question string to prepare
         :return: instance of Question class
         """
-        q = Question()
+        q = Question(question)
         for w in question[:-1].lower().split():  # assuming last character of question is a ? mark
             if w not in self.stopwords:
                 upsert(q.tf, w, 1)  # case folding all words to lower
-        total_docs = len(self.dataset)
-        self.compute_word_weights_for_q(q, total_docs)
+        self.compute_word_weights_for_q(q, self.dataset_size)
         return q
 
     def compute_word_weights(self):
@@ -76,9 +76,8 @@ class Labeler:
         Computes tf*idf vector for all questions in dataset
         :return: None
         """
-        total_docs = len(self.dataset)
         for q in self.dataset:
-            self.compute_word_weights_for_q(q, total_docs)
+            self.compute_word_weights_for_q(q, self.dataset_size)
 
     def compute_word_weights_for_q(self, q, total_docs):
         """
@@ -89,13 +88,13 @@ class Labeler:
         """
         self.normalize_counts(q)  # so that longer questions will not have an added advantage
         for w in q.tf:
-            df = 0
-            if w in self.word_counts:
+            df = 0  # default frequency for unknown words. Tip: Possible improvement
+            if w in self.word_counts:  # if we know the word
                 df = self.word_counts[w]
             idf = math.log(float(total_docs) / (1 + df), 10)
             q.word_weights[w] = q.tf[w] * idf
 
-    def find_k_similar(self, q, k, similarity):
+    def find_k_similar_questions(self, q, k, similarity):
         """
         Finds K most similar questions from the dataset to q
         :param q: question to find similar items to
@@ -126,7 +125,7 @@ class Labeler:
         :return: list of categories from best match to least match
         """
         categories = []
-        score_qs = self.find_k_similar(q, k, similarity)
+        score_qs = self.find_k_similar_questions(q, k, similarity)
         for score, qs in reversed(score_qs):
             categories += qs.categories
             if len(categories) > k:
@@ -168,12 +167,34 @@ class Labeler:
             q.tf[w] /= normalization_factor
 
 
-if __name__ == '__main__':
-    l = Labeler()
+def test():
+    l = Labeler(3)
     l.save("3 1 2 4", "What is the meaning of life?")
     l.save("7 1 2 5 8 9 11 15", "What is Quora?")
     l.save("2 14 178", "What are the best Google calendar hacks?")
     l.compute_word_weights()
     print l.find_k_categories(l.prepare_question("What is Google Calendar?"), 3, Labeler.cosine_similarity)
     print l.find_k_categories(l.prepare_question("Is Quora has meaning for life?"), 3, Labeler.cosine_similarity)
+
+
+def main():
+    t, e = [int(i) for i in raw_input().split(" ")]  # # of categorised questions, # of un-categorised questions
+    l = Labeler(t)
+    for i in range(0, t):
+        category_string_with_count = raw_input()  # count category_id category_id category_id...
+        category_string = category_string_with_count[category_string_with_count.index(" ") + 1:]
+        question_string = raw_input()
+        l.save(category_string, question_string)
+    l.compute_word_weights()
+    for i in range(0, e):
+        print " ".join(l.find_k_categories(l.prepare_question(raw_input()), 10, Labeler.cosine_similarity))
+
+
+if __name__ == '__main__':
+    main()
     print "Done"
+
+# TODO
+# 1) Lemmatization
+# 2) Word-Context Matrix
+# 3) Consider Synonyms
