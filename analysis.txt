@@ -1,0 +1,22 @@
+1) stop-tfidf-k_qs-k_cat
+----------------------
+Min score: 18.7475433775
+Max score: 100
+Your raw score: 61.4057641912
+Your normalized score: 0.525008382354
+
+
+2) (1) + nltk tokenizer without ignoring case
+----------------------------------------------
+Min score: 18.7475433775
+Max score: 100
+Your raw score: 64.8407826935
+Your normalized score: 0.567284254926
+
+
+stop-tfidf-k_qs-wt_qs_rank
+-----------------------------
+Min score: 18.636317392
+Max score: 100
+Your raw score: 15.3883418868
+Your normalized score: 0.0

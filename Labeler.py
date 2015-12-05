@@ -1,5 +1,8 @@
 import math
 import heapq
+from nltk.tokenize import word_tokenize
+from nltk.corpus.reader.wordnet import ADJ, ADJ_SAT, ADV, NOUN, VERB
+from nltk.stem import WordNetLemmatizer
 
 DEBUG = False
 
@@ -43,6 +46,7 @@ class Labeler:
              u'so', u'than', u'too', u'very', u's', u't', u'can', u'will', u'just', u'don', u'should', u'now'])
         self.dataset = []  # known questions
         self.dataset_size = datasize
+        self.wnl = WordNetLemmatizer()
 
     def save(self, category_string, question):
         """
@@ -52,9 +56,10 @@ class Labeler:
         :return: None
         """
         q = Question()
-        q.categories = [int(c) for c in category_string.split(" ")]
+        q.categories = category_string.split(" ")
         q.question = question
-        for w in question[:-1].lower().split():  # assuming last character of question is a ? mark
+        for w in word_tokenize(question)[:-1]:  # last char is a ?
+            w = self.wnl.lemmatize(w, NOUN)
             if w not in self.stopwords:
                 upsert(q.tf, w, 1)  # case folding all words to lower
                 upsert(self.word_counts, w, 1)
@@ -67,7 +72,8 @@ class Labeler:
         :return: instance of Question class
         """
         q = Question(question)
-        for w in question[:-1].lower().split():  # assuming last character of question is a ? mark
+        for w in word_tokenize(question)[:-1]:  # assuming last character of question is a ? mark
+            w = self.wnl.lemmatize(w, NOUN)
             if w not in self.stopwords:
                 upsert(q.tf, w, 1)  # case folding all words to lower
         self.compute_word_weights_for_q(q, self.dataset_size)
@@ -126,19 +132,13 @@ class Labeler:
         :param similarity: similarity function to use to compare with questions in dataset
         :return: list of categories from best match to least match
         """
-        categories = {}  # key: category, value: [count, best_rank_for_this_category, weight]
+        categories = []
         score_qs = self.find_k_similar_questions(q, k, similarity)
-        rank = 1
         for score, qs in reversed(score_qs):
-            for c in qs.categories:
-                if c in categories:
-                    categories[c][0] += 1
-                else:
-                    categories[c] = [1, rank]
-            rank += 1
-
-        # sort categories by their (count / best_rank) and return top k
-        return sorted(categories.items(), key=lambda item: item[1][0] / item[1][1])[0:k]
+            categories += qs.categories
+            if len(categories) > k:
+                break
+        return categories[0:k]
 
     @staticmethod
     def cosine_similarity(q1, q2):
@@ -197,10 +197,7 @@ def main():
         l.save(category_string, question_string)
     l.compute_word_weights()
     for i in range(0, e):
-        if DEBUG and i % 10 == 0:
-            print(i)
-        topics = l.find_k_categories(l.prepare_question(raw_input()), 10, Labeler.cosine_similarity)
-        print ' '.join([str(t[0]) for t in topics])
+        print " ".join(l.find_k_categories(l.prepare_question(raw_input()), 10, Labeler.cosine_similarity))
 
 
 if __name__ == '__main__':

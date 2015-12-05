@@ -152,3 +152,4 @@ docs/_build/
 target/
 
 data/labeler_sample.out
+.DS_Store
