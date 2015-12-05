@@ -1,6 +1,8 @@
 import math
 import heapq
 
+DEBUG = False
+
 
 def upsert(a, key, inc):
     """
@@ -50,7 +52,7 @@ class Labeler:
         :return: None
         """
         q = Question()
-        q.categories = category_string.split(" ")
+        q.categories = [int(c) for c in category_string.split(" ")]
         q.question = question
         for w in question[:-1].lower().split():  # assuming last character of question is a ? mark
             if w not in self.stopwords:
@@ -124,13 +126,19 @@ class Labeler:
         :param similarity: similarity function to use to compare with questions in dataset
         :return: list of categories from best match to least match
         """
-        categories = []
+        categories = {}  # key: category, value: [count, best_rank_for_this_category, weight]
         score_qs = self.find_k_similar_questions(q, k, similarity)
+        rank = 1
         for score, qs in reversed(score_qs):
-            categories += qs.categories
-            if len(categories) > k:
-                break
-        return categories[0:k]
+            for c in qs.categories:
+                if c in categories:
+                    categories[c][0] += 1
+                else:
+                    categories[c] = [1, rank]
+            rank += 1
+
+        # sort categories by their (count / best_rank) and return top k
+        return sorted(categories.items(), key=lambda item: item[1][0] / item[1][1])[0:k]
 
     @staticmethod
     def cosine_similarity(q1, q2):
@@ -150,6 +158,8 @@ class Labeler:
         for w in q2.word_weights:
             q2_sum_squares += (q2.word_weights[w] * q2.word_weights[w])
         denominator = math.sqrt(q1_sum_squares) * math.sqrt(q2_sum_squares)
+        if denominator == 0:
+            return 0
         return numerator / denominator
 
     @staticmethod
@@ -187,7 +197,10 @@ def main():
         l.save(category_string, question_string)
     l.compute_word_weights()
     for i in range(0, e):
-        print " ".join(l.find_k_categories(l.prepare_question(raw_input()), 10, Labeler.cosine_similarity))
+        if DEBUG and i % 10 == 0:
+            print(i)
+        topics = l.find_k_categories(l.prepare_question(raw_input()), 10, Labeler.cosine_similarity)
+        print ' '.join([str(t[0]) for t in topics])
 
 
 if __name__ == '__main__':
@@ -198,3 +211,8 @@ if __name__ == '__main__':
 # 1) Lemmatization
 # 2) Word-Context Matrix
 # 3) Consider Synonyms
+# 5) Try Bayesian Estimation also (PPT 16 - Slides #31 - #33)
+# 6) What to do with 0 match questions?
+
+
+# 4) After finding K similar questions, choose topics which are most frequent in all these K

@@ -151,3 +151,4 @@ docs/_build/
 # PyBuilder
 target/
 
+data/labeler_sample.out
