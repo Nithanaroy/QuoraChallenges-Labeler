@@ -14,6 +14,15 @@ Your raw score: 64.8407826935
 Your normalized score: 0.567284254926
 
 
+3) (2) + wordnet lemmatizer
+----------------------------
+Min score: 18.7475433775
+Max score: 100
+Your raw score: 66.3941194019
+Your normalized score: 0.586401667162
+--- 34.310890913 seconds ---
+
+
 stop-tfidf-k_qs-wt_qs_rank
 -----------------------------
 Min score: 18.636317392

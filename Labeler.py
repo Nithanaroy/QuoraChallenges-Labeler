@@ -3,6 +3,7 @@ import heapq
 from nltk.tokenize import word_tokenize
 from nltk.corpus.reader.wordnet import ADJ, ADJ_SAT, ADV, NOUN, VERB
 from nltk.stem import WordNetLemmatizer
+import time  # For computing running time
 
 DEBUG = False
 
@@ -27,11 +28,12 @@ class Question:
         self.question = question_string
         self.tf = {}
         self.word_weights = {}
+        self.non_stop_words = []
 
 
 class Labeler:
     def __init__(self, datasize):
-        self.word_counts = {}  # known words and their counts
+        self.all_words = {}  # known words, their counts and their index in context_matrix
         self.stopwords = frozenset(
             [u'i', u'me', u'my', u'myself', u'we', u'our', u'ours', u'ourselves', u'you', u'your', u'yours',
              u'yourself', u'yourselves', u'he', u'him', u'his', u'himself', u'she', u'her', u'hers', u'herself', u'it',
@@ -47,6 +49,7 @@ class Labeler:
         self.dataset = []  # known questions
         self.dataset_size = datasize
         self.wnl = WordNetLemmatizer()
+        self.word_context_matrix = []
 
     def save(self, category_string, question):
         """
@@ -58,12 +61,52 @@ class Labeler:
         q = Question()
         q.categories = category_string.split(" ")
         q.question = question
-        for w in word_tokenize(question)[:-1]:  # last char is a ?
-            w = self.wnl.lemmatize(w, NOUN)
-            if w not in self.stopwords:
-                upsert(q.tf, w, 1)  # case folding all words to lower
-                upsert(self.word_counts, w, 1)
+        words = word_tokenize(question)[:-1]  # last char is a ?
+        non_stop_words = []
+        for w in words:
+            if w.lower() not in self.stopwords:
+                w = self.wnl.lemmatize(w, NOUN)
+                non_stop_words.append(w)
+        q.non_stop_words = non_stop_words
+
+        for i, w in enumerate(non_stop_words):
+            upsert(q.tf, w, 1)  # term frequency
+            if w in self.all_words:
+                self.all_words[w][0] += 1
+            else:
+                self.all_words[w] = [1, len(self.all_words)]
         self.dataset.append(q)
+
+    def create_context_matrix(self):
+        """
+        Creates context matrix for finding similar words in our dataset
+        context: 1 word to left and 1 word to the right of any word is its context
+        Pre-Condition: self.all_words should be populated with all words.
+        Pre-Condition: self.dataset should have all questions
+        :return: word-word context matrix
+        """
+        total_words = len(self.all_words)
+        for i in range(0, total_words):
+            self.word_context_matrix.append([0] * total_words)
+
+        for q in self.dataset:
+            for i, w in enumerate(q.non_stop_words):
+                self.update_context_for_word(i, q.non_stop_words)
+
+    def update_context_for_word(self, i, words):
+        """
+        Updates the context of words[i]
+        :param i: index of the word in words array, whose context has to be updated
+        :param words: sentence as an array of words
+        :return: update entries in context matrix
+        """
+        row_index = self.all_words[words[i]][1]
+        if i > 0:
+            lindex = self.all_words[words[i - 1]][1]
+            self.word_context_matrix[row_index][lindex] += 1
+        if i < len(words) - 1:
+            rindex = self.all_words[words[i + 1]][1]
+            self.word_context_matrix[row_index][rindex] += 1
 
     def prepare_question(self, question):
         """
@@ -97,8 +140,8 @@ class Labeler:
         self.normalize_counts(q)  # so that longer questions will not have an added advantage
         for w in q.tf:
             df = 0  # default frequency for unknown words. Tip: Possible improvement
-            if w in self.word_counts:  # if we know the word
-                df = self.word_counts[w]
+            if w in self.all_words:  # if we know the word
+                df = self.all_words[w][0]
             idf = math.log(float(total_docs) / (1 + df), 10)
             q.word_weights[w] = q.tf[w] * idf
 
@@ -182,6 +225,7 @@ def test():
     l.save("3 1 2 4", "What is the meaning of life?")
     l.save("7 1 2 5 8 9 11 15", "What is Quora?")
     l.save("2 14 178", "What are the best Google calendar hacks?")
+    l.create_context_matrix()
     l.compute_word_weights()
     print l.find_k_categories(l.prepare_question("What is Google Calendar?"), 3, Labeler.cosine_similarity)
     print l.find_k_categories(l.prepare_question("Is Quora has meaning for life?"), 3, Labeler.cosine_similarity)
@@ -195,21 +239,29 @@ def main():
         category_string = category_string_with_count[category_string_with_count.index(" ") + 1:]
         question_string = raw_input()
         l.save(category_string, question_string)
-    l.compute_word_weights()
-    for i in range(0, e):
-        print " ".join(l.find_k_categories(l.prepare_question(raw_input()), 10, Labeler.cosine_similarity))
+    l.create_context_matrix()
+    print(l.word_context_matrix)
+    # l.compute_word_weights()
+    # for i in range(0, e):
+    #     print " ".join(l.find_k_categories(l.prepare_question(raw_input()), 10, Labeler.cosine_similarity))
 
 
 if __name__ == '__main__':
+    start_time = time.time()
     main()
-    print "Done"
+    # test()
+    if DEBUG:
+        print("--- %s seconds ---" % (time.time() - start_time))
 
 # TODO
-# 1) Lemmatization
+# 7) POS for Lemmatization
 # 2) Word-Context Matrix
+# 6) What to do with 0 match questions?
 # 3) Consider Synonyms
 # 5) Try Bayesian Estimation also (PPT 16 - Slides #31 - #33)
-# 6) What to do with 0 match questions?
 
+
+
+# 1) Lemmatization
 
 # 4) After finding K similar questions, choose topics which are most frequent in all these K
